@@ -1,0 +1,16 @@
+#!/usr/bin/env -S deno run --allow-env --allow-read
+import { jsonDecryptData } from 'npm:@polkadot/util-crypto'
+import { decodeBase64 } from 'jsr:@std/encoding/base64'
+import { encodeHex }  from 'jsr:@std/encoding/hex'
+
+const file = Deno.args[0]
+if (!file) {
+  console.error('missing path of JSON file')
+  Deno.exit(1)
+}
+
+const json = JSON.parse(await Deno.readTextFile(Deno.args[0]))
+const data = decodeBase64(json.encoded)
+let key = jsonDecryptData(data, prompt('Key password'), json.encoding.type)
+key = encodeHex(key.subarray(16, 16 + 64)) // PCSK header len, secret key len
+console.info(`0x${key}`)

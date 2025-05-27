@@ -69,12 +69,7 @@ impl SigningChoice {
             }
             SigningChoice::Seed { hex_seed, .. } => {
                 let bytes = hex::decode(hex_seed.trim_start_matches("0x"))?;
-                if bytes.len() != 32 {
-                    anyhow::bail!("Seed must be 32 bytes (got {} bytes)", bytes.len());
-                }
-                let mut seed = [0u8; 32];
-                seed.copy_from_slice(&bytes);
-                Ok(sr25519::Pair::from_seed(&seed))
+                sr25519::Pair::from_seed_slice(&bytes).map_err(|e| anyhow::anyhow!("Seed: {e}"))
             }
         }
     }

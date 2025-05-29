@@ -1,0 +1,12 @@
+{
+  "version": 0,
+  "descriptorPath": ".papi/descriptors",
+  "entries": {
+    "kreivo": {
+      "wsUrl": "wss://testnet.kreivo.kippu.rocks",
+      "metadata": ".papi/metadata/kreivo.scale",
+      "genesis": "0x5cdd465e1273859192b043721e63ad19c8585f7c9779c53cba1d3260549b60ad",
+      "codeHash": "0xf0aa5f51fabe7708ec973038cec49f39990e1ed96af73cd908e557ecd15aaae3"
+    }
+  }
+}

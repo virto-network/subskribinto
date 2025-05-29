@@ -1,0 +1,19 @@
+{
+  "tasks": {
+    "dev": "deno run --watch main.ts"
+  },
+  "imports": {
+    "@inquirer/prompts": "npm:@inquirer/prompts@^7.5.3",
+    "@std/assert": "jsr:@std/assert@1",
+    "@std/fs": "jsr:@std/fs@^1.0.17",
+    "commander": "npm:commander@^14.0.0",
+    "polkadot-api": "npm:polkadot-api@^1.12.2"
+  },
+  "patch": [
+    "./.papi/descriptors"
+  ],
+  "unstable": [
+    "npm-patch"
+  ],
+  "nodeModulesDir": "auto"
+}

@@ -12,13 +12,11 @@ use subxt::{
 
 pub async fn sign_and_submit(
     signing: SigningChoice,
-    call_hex: String,
+    call_bytes: Vec<u8>,
     endpoint: &str,
 ) -> anyhow::Result<()> {
     let signer: PairSigner = signing.try_into_keypair()?.into();
     let api = subxt::OnlineClient::<config::KreivoConfig>::from_url(endpoint).await?;
-
-    let call_bytes = hex::decode(call_hex.trim_start_matches("0x"))?;
 
     // Now we decode using metadata.
     let metadata = api.metadata();

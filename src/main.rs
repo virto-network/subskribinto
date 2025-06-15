@@ -1,7 +1,8 @@
-use ::sp_core::{Pair as _, sr25519};
 use bip39::Mnemonic;
 use clap::{Args, Parser};
 use inquire::Text;
+use ::sp_core::{sr25519, Pair as _};
+use std::path::PathBuf;
 
 pub(crate) mod config;
 pub(crate) mod signer;
@@ -19,7 +20,11 @@ struct Cli {
 
     /// Hex‑encoded call data (0x…)
     #[arg(long, value_name = "HEX")]
-    call_data: Option<String>,
+    call: Option<String>,
+
+    /// A file containing the SCALE-encoded call data in raw format
+    #[arg(long, value_name = "FILE")]
+    call_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -79,23 +84,24 @@ impl SigningChoice {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // 1️⃣ Gather endpoint
     let endpoint = match cli.endpoint {
         Some(ep) => ep,
         None => Text::new("WebSocket endpoint URL?").prompt()?,
     };
 
-    // 2️⃣ Determine signing choice
     let signing_choice = resolve_signing_choice(cli.signing)?;
 
-    // 3️⃣ Get call data
-    let call_data_hex = match cli.call_data {
-        Some(data) => data,
-        None => Text::new("Hex‑encoded call data (0x…)?").prompt()?,
+    let call_bytes = {
+        let call_hex = match (cli.call, cli.call_file) {
+            (Some(data), _) => data,
+            (_, Some(path)) => std::fs::read(path).map(hex::encode)?,
+            (_, _) => Text::new("Hex‑encoded call data (0x…)?").prompt()?,
+        };
+
+        hex::decode(call_hex.trim_start_matches("0x"))?
     };
 
-    // 4️⃣ Sign & submit (stub)
-    tx::sign_and_submit(signing_choice, call_data_hex, &endpoint).await?;
+    tx::sign_and_submit(signing_choice, call_bytes, &endpoint).await?;
 
     Ok(())
 }

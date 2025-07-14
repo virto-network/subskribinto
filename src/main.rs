@@ -1,7 +1,7 @@
+use ::sp_core::{Pair as _, sr25519};
 use bip39::Mnemonic;
 use clap::{Args, Parser};
 use inquire::Text;
-use ::sp_core::{sr25519, Pair as _};
 use std::path::PathBuf;
 
 pub(crate) mod config;
@@ -94,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
     let call_bytes = {
         let call_hex = match (cli.call, cli.call_file) {
             (Some(data), _) => data,
-            (_, Some(path)) => std::fs::read(path).map(hex::encode)?,
+            (_, Some(path)) => std::fs::read_to_string(path)?.trim().to_string(),
             (_, _) => Text::new("Hex‑encoded call data (0x…)?").prompt()?,
         };
 

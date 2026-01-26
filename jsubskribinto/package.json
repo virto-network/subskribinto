@@ -1,5 +1,0 @@
-{
-  "dependencies": {
-    "@polkadot-api/descriptors": "file:.papi/descriptors"
-  }
-}

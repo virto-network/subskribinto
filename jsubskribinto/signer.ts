@@ -2,16 +2,15 @@ import {
   decodeAddress,
   encodeAddress,
   base64Decode,
-} from "npm:@polkadot/util-crypto";
+} from "@polkadot/util-crypto";
 
-import { KeypairType } from "npm:@polkadot/util-crypto/types";
-import type { KeyringPair$Json } from "npm:@polkadot/keyring/types";
-import {
-  getPolkadotSigner,
-  type PolkadotSigner,
-} from "npm:@polkadot-api/signer";
-import { createPair } from "npm:@polkadot/keyring";
+import { KeypairType } from "@polkadot/util-crypto/types";
+import type { KeyringPair$Json } from "@polkadot/keyring/types";
+import { getPolkadotSigner, type PolkadotSigner } from "@polkadot-api/signer";
+import { createPair } from "@polkadot/keyring";
 import { isHex, hexToU8a } from "npm:@polkadot/util";
+import { ed25519CreateDerive } from "@polkadot-labs/hdkd";
+import { mnemonicToMiniSecret } from "@polkadot-labs/hdkd-helpers";
 
 export enum SiginigChoiceType {
   MNEMONIC = 1,
@@ -38,7 +37,11 @@ export type SigningChoice =
 export function intoKeypair(signingChoice: SigningChoice): PolkadotSigner {
   switch (signingChoice.type) {
     case SiginigChoiceType.MNEMONIC: {
-      throw new Error("Not implemented yet");
+      const derive = ed25519CreateDerive(
+        mnemonicToMiniSecret(signingChoice.phrase),
+      );
+      const pair = derive(signingChoice.derivePath ?? "");
+      return getPolkadotSigner(pair.publicKey, "Sr25519", pair.sign);
     }
     case SiginigChoiceType.SEED: {
       throw new Error("Not implemented yet");
@@ -59,7 +62,7 @@ export function intoKeypair(signingChoice: SigningChoice): PolkadotSigner {
         isHex(json.encoded)
           ? hexToU8a(json.encoded)
           : base64Decode(json.encoded),
-        encType
+        encType,
       );
 
       // unlock, save account and then lock (locking cleans secretKey, so needs to be last)

@@ -1,15 +1,14 @@
-import { Binary, createClient } from "npm:polkadot-api";
+import { Binary, createClient } from "polkadot-api";
 import { SigningChoice, intoKeypair } from "./signer.ts";
 
-import { getWsProvider } from "npm:polkadot-api/ws-provider/web";
+import { getWsProvider } from "polkadot-api/ws-provider";
 
 export async function signAndSubmit(
   signingChoice: SigningChoice,
   callData: Binary,
-  endpoint: string
+  endpoint: string,
 ) {
   const signer = intoKeypair(signingChoice);
-
   const client = createClient(getWsProvider(endpoint));
 
   const tx = await client.getUnsafeApi().txFromCallData(callData);
@@ -19,32 +18,43 @@ export async function signAndSubmit(
       tx.decodedCall,
       (_, value) => {
         if (typeof value === "bigint") {
+          if (value < 2n ** 52n) {
+            return Number(value);
+          }
+
           return value.toLocaleString();
+        } else if (value instanceof Binary) {
+          const hexBytes = value.asHex();
+          return hexBytes.length > 256
+            ? `${hexBytes.slice(0, 256)}...`
+            : hexBytes;
         } else {
           return value;
         }
       },
-      4
-    )}`
+      4,
+    )}`,
   );
 
   const { resolve, reject, promise } = Promise.withResolvers<void>();
 
-  tx.signSubmitAndWatch(signer).subscribe({
+  const extrinsic = await tx.sign(signer);
+
+  client.submitAndWatch(extrinsic).subscribe({
     next(txEvent) {
       switch (txEvent.type) {
         case "signed":
           return console.log(`Call signed`);
         case "broadcasted":
           return console.log(
-            `Transaction submitted with hash ${txEvent.txHash}`
+            `Transaction submitted with hash ${txEvent.txHash}`,
           );
         case "txBestBlocksState":
           return console.log(`Transaction included in block`);
         case "finalized":
           return console.log(
             `Transaction finalized: ${txEvent.block.number}-${txEvent.block.index}`,
-            txEvent.ok ? txEvent.events : txEvent.dispatchError
+            txEvent.ok ? txEvent.events : txEvent.dispatchError,
           );
       }
     },

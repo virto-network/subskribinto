@@ -9,8 +9,8 @@ import type { KeyringPair$Json } from "@polkadot/keyring/types";
 import { getPolkadotSigner, type PolkadotSigner } from "@polkadot-api/signer";
 import { createPair } from "@polkadot/keyring";
 import { isHex, hexToU8a } from "npm:@polkadot/util";
-import { ed25519CreateDerive } from "@polkadot-labs/hdkd";
-import { mnemonicToMiniSecret } from "@polkadot-labs/hdkd-helpers";
+import { ed25519CreateDerive, sr25519CreateDerive } from "@polkadot-labs/hdkd";
+import { KeyPair, mnemonicToMiniSecret } from "@polkadot-labs/hdkd-helpers";
 
 export enum SiginigChoiceType {
   MNEMONIC = 1,
@@ -23,6 +23,7 @@ export type SigningChoice =
       type: SiginigChoiceType.MNEMONIC;
       phrase: string;
       derivePath?: string;
+      scheme: "sr25519" | "ed25519";
     }
   | {
       type: SiginigChoiceType.SEED;
@@ -37,11 +38,28 @@ export type SigningChoice =
 export function intoKeypair(signingChoice: SigningChoice): PolkadotSigner {
   switch (signingChoice.type) {
     case SiginigChoiceType.MNEMONIC: {
-      const derive = ed25519CreateDerive(
-        mnemonicToMiniSecret(signingChoice.phrase),
-      );
+      let derive: (path: string) => KeyPair;
+      switch (signingChoice.scheme) {
+        case "sr25519": {
+          derive = sr25519CreateDerive(
+            mnemonicToMiniSecret(signingChoice.phrase),
+          );
+          break;
+        }
+        default: {
+          derive = ed25519CreateDerive(
+            mnemonicToMiniSecret(signingChoice.phrase),
+          );
+          break;
+        }
+      }
+
       const pair = derive(signingChoice.derivePath ?? "");
-      return getPolkadotSigner(pair.publicKey, "Sr25519", pair.sign);
+      return getPolkadotSigner(
+        pair.publicKey,
+        signingChoice.scheme === "ed25519" ? "Ed25519" : "Sr25519",
+        pair.sign,
+      );
     }
     case SiginigChoiceType.SEED: {
       throw new Error("Not implemented yet");

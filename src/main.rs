@@ -1,12 +1,6 @@
 // Copyright (c) Virto Network
 // SPDX-License-Identifier: MIT
 
-// Copyright (c) Virto Network
-// SPDX-License-Identifier: MIT
-
-// Copyright (c) Virto Network
-// SPDX-License-Identifier: MIT
-
 use ::sp_core::{Pair as _, crypto::Ss58Codec, ed25519, sr25519};
 use bip39::Mnemonic;
 use clap::{Args, Parser, Subcommand};

@@ -1,12 +1,6 @@
 // Copyright (c) Virto Network
 // SPDX-License-Identifier: MIT
 
-// Copyright (c) Virto Network
-// SPDX-License-Identifier: MIT
-
-// Copyright (c) Virto Network
-// SPDX-License-Identifier: MIT
-
 //! Connecting to a chain, and signing, submitting and following transactions.
 
 use anyhow::{anyhow, bail, ensure};

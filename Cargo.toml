@@ -15,3 +15,9 @@ sp-core = "36.1.0"
 subxt = { version = "0.42.1" }
 tokio = { version = "1.45.1", features = ["rt-multi-thread"] }
 scale-info = "2.11.6"
+scrypt = { version = "0.11", default-features = false }
+crypto_secretbox = { version = "0.1", default-features = false, features = ["alloc", "salsa20"] }
+base64 = "0.22"
+serde_json = "1"
+schnorrkel = "0.11.4"
+serde = { version = "1", features = ["derive"] }

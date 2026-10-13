@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/virto-network/subskribinto/releases/tag/v0.2.2) - 2026-10-13
+
+### Changed
+
+- Updated dependencies: `scrypt` 0.12 ([#15](https://github.com/virto-network/subskribinto/pull/15)), `bip39` 3
+  ([#14](https://github.com/virto-network/subskribinto/pull/14)), `inquire` 0.9, which draws the interactive prompts
+  ([#13](https://github.com/virto-network/subskribinto/pull/13)), `base64` 0.23
+  ([#16](https://github.com/virto-network/subskribinto/pull/16)), and minor and patch updates of `clap`, `tokio`,
+  `serde_json`, `schnorrkel`, `scale-value` and `zeroize` ([#12](https://github.com/virto-network/subskribinto/pull/12)).
+  Key files, stored accounts and policies work as before.
+
 ## [0.2.1](https://github.com/virto-network/subskribinto/releases/tag/v0.2.1) - 2026-10-13
 
 ### Added

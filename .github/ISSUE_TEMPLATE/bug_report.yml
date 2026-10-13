@@ -1,0 +1,36 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Never paste real secrets** (mnemonics, seeds, key files, passwords) here.
+        If the bug has security impact, report it privately instead: see SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The command you ran (with secrets redacted), the call data if relevant, and the full output.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: e.g. 0.1.0, or the commit hash you built from
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and chain
+      placeholder: e.g. macOS 26.1 (arm64), Kreivo mainnet

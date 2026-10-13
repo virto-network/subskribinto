@@ -8,9 +8,11 @@
 use subxt::Metadata;
 
 use crate::{
+    audit::AuditLog,
     call::DecodedCall,
-    policy::{ProxyConfig, parse_account},
+    policy::{Approval, ProxyConfig, parse_account},
     store::AccountRecord,
+    tx::{self, Api, Outcome, Progress},
 };
 
 /// Longest call description put in an operating-system approval dialog.
@@ -38,9 +40,30 @@ impl Request {
         })
     }
 
-    /// Check the requested call, and every call nested in it, against the account's policy.
-    pub fn check(&self) -> anyhow::Result<()> {
+    /// Check the requested call, and every call nested in it, against the account's policy, and
+    /// whether it needs the user's approval.
+    pub fn check(&self) -> anyhow::Result<Approval> {
         self.account.policy.check(&self.call.calls()?)
+    }
+
+    /// Sign and submit the request, recording it in the audit log before and after. Call only
+    /// once the policy allowed it and, when required, the user approved it.
+    pub async fn sign(
+        &self,
+        api: &Api,
+        approval: Approval,
+        audit: &AuditLog,
+        progress: impl FnMut(Progress<'_>),
+    ) -> anyhow::Result<Outcome> {
+        audit.signing(self, approval)?;
+        let outcome = match self.account.signer() {
+            Ok(signer) => tx::sign_and_submit(api, &self.signed, &signer, progress).await,
+            Err(e) => Err(e),
+        };
+        if let Err(e) = audit.finished(self, approval, &outcome) {
+            eprintln!("warning: {e:#}");
+        }
+        outcome
     }
 
     /// `Pallet.call` of the requested call and of every call nested in it.

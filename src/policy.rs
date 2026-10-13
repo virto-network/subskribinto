@@ -9,7 +9,7 @@
 
 use std::{collections::BTreeMap, fmt};
 
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, anyhow, ensure};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sp_core::crypto::{AccountId32, Ss58Codec};
@@ -45,8 +45,13 @@ pub struct ProxyConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
-    /// `"Pallet.call"`, or `"Pallet.*"` for any call of a pallet.
+    /// `"Pallet.call"`, `"Pallet.*"` for any call of a pallet, or `"*"` for any call at all (only
+    /// in rules that need approval).
     pub call: String,
+    /// Sign without asking the user, when every call in the transaction matches an unattended rule.
+    /// Otherwise the user approves each signature.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unattended: bool,
     /// Upper bounds for numeric arguments, by argument name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[schemars(with = "BTreeMap<String, String>")]
@@ -55,6 +60,16 @@ pub struct Rule {
     /// argument must be listed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub to: BTreeMap<String, Vec<String>>,
+}
+
+/// How a transaction the policy allows gets signed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Approval {
+    /// Every call matches an unattended rule: signed without asking.
+    Unattended,
+    /// The user approves it first.
+    Required,
 }
 
 /// An unsigned amount, written as an integer or a string (TOML integers stop at 2^63).
@@ -123,19 +138,30 @@ impl Policy {
             parse_account(&proxy.real).context("Invalid `proxy.real`")?;
         }
         for rule in &self.allow {
+            if rule.call == ANY_CALL {
+                ensure!(
+                    !rule.unattended,
+                    "`call = \"*\"` can't be unattended: list the calls to sign without approval"
+                );
+                ensure!(
+                    rule.max.is_empty() && rule.to.is_empty(),
+                    "`call = \"*\"` can't have `max` or `to` limits"
+                );
+                continue;
+            }
             let (pallet, call) = rule
                 .call
                 .split_once('.')
                 .filter(|(pallet, call)| !pallet.is_empty() && !call.is_empty())
                 .ok_or_else(|| {
                     anyhow!(
-                        "Rule `{}` must look like `Pallet.call` or `Pallet.*`",
+                        "Rule `{}` must look like `Pallet.call`, `Pallet.*` or `*`",
                         rule.call
                     )
                 })?;
             ensure!(
                 pallet != "*" && !call.contains('.'),
-                "Rule `{}` must look like `Pallet.call` or `Pallet.*`",
+                "Rule `{}` must look like `Pallet.call`, `Pallet.*` or `*`",
                 rule.call
             );
             for (field, accounts) in &rule.to {
@@ -154,36 +180,41 @@ impl Policy {
         Ok(())
     }
 
-    /// Check that every call (top-level and nested) is allowed.
-    pub fn check(&self, calls: &[CallRef<'_>]) -> anyhow::Result<()> {
+    /// Check that every call (top-level and nested) is allowed, and whether the transaction can be
+    /// signed without asking: only when every call is allowed by an unattended rule.
+    pub fn check(&self, calls: &[CallRef<'_>]) -> anyhow::Result<Approval> {
         ensure!(!calls.is_empty(), "No call found");
+        let mut approval = Approval::Unattended;
         for call in calls {
-            let mut matched = self
-                .allow
-                .iter()
-                .filter(|rule| rule.matches(call))
-                .peekable();
+            let matched: Vec<&Rule> = self.allow.iter().filter(|r| r.matches(call)).collect();
             ensure!(
-                matched.peek().is_some(),
+                !matched.is_empty(),
                 "`{call}` is not allowed by this account's policy"
             );
-            let mut failures = Vec::new();
-            if !matched.any(|rule| match rule.check(call) {
-                Ok(()) => true,
-                Err(e) => {
-                    failures.push(e.to_string());
-                    false
+            let (mut allowed, mut unattended, mut failures) = (false, false, Vec::new());
+            for rule in matched {
+                match rule.check(call) {
+                    Ok(()) => {
+                        allowed = true;
+                        unattended |= rule.unattended;
+                    }
+                    Err(e) => failures.push(e.to_string()),
                 }
-            }) {
-                bail!("`{call}` is not allowed: {}", failures.join("; "));
+            }
+            ensure!(allowed, "`{call}` is not allowed: {}", failures.join("; "));
+            if !unattended {
+                approval = Approval::Required;
             }
         }
-        Ok(())
+        Ok(approval)
     }
 }
 
 impl Rule {
     fn matches(&self, call: &CallRef<'_>) -> bool {
+        if self.call == ANY_CALL {
+            return true;
+        }
         match self.call.split_once('.') {
             Some((pallet, name)) => pallet == call.pallet && (name == "*" || name == call.call),
             None => false,
@@ -221,6 +252,9 @@ impl Rule {
         Ok(())
     }
 }
+
+/// The rule that matches every call.
+const ANY_CALL: &str = "*";
 
 fn field_of<'a>(call: &CallRef<'a>, field: &str) -> anyhow::Result<&'a Value> {
     call.field(field)
@@ -267,7 +301,7 @@ pub(crate) mod tests {
         )
     }
 
-    fn check(policy: &Policy, call: &DecodedCall) -> anyhow::Result<()> {
+    fn check(policy: &Policy, call: &DecodedCall) -> anyhow::Result<Approval> {
         policy.check(&call.calls()?)
     }
 
@@ -385,6 +419,96 @@ pub(crate) mod tests {
         assert_eq!(policy.allow[0].max["value"], Amount(10_000_000_000_000));
     }
 
+    /// `examples/unattended.toml`: admin operations unattended, everything else approved.
+    fn unattended_policy() -> Policy {
+        Policy::from_toml(include_str!("../examples/unattended.toml")).unwrap()
+    }
+
+    #[test]
+    fn unattended_rules_skip_approval() {
+        let metadata = metadata();
+        let policy = unattended_policy();
+
+        let add_member = call(
+            &metadata,
+            "Communities",
+            "add_member",
+            &format!("{{ who: Id({BOB}) }}"),
+        );
+        assert_eq!(check(&policy, &add_member).unwrap(), Approval::Unattended);
+
+        let batch = call(
+            &metadata,
+            "Utility",
+            "batch",
+            "{ calls: (System(remark { remark: 0x01 }), Preimage(note_preimage { bytes: 0x02 })) }",
+        );
+        assert_eq!(check(&policy, &batch).unwrap(), Approval::Unattended);
+    }
+
+    #[test]
+    fn anything_else_needs_approval() {
+        let metadata = metadata();
+        let policy = unattended_policy();
+
+        // Allowed by the catch-all `*` rule, which isn't unattended.
+        assert_eq!(
+            check(&policy, &transfer(&metadata, BOB, 1)).unwrap(),
+            Approval::Required
+        );
+
+        // One attended call is enough to need approval for the whole transaction…
+        let mixed = call(
+            &metadata,
+            "Utility",
+            "batch",
+            &format!(
+                "{{ calls: (System(remark {{ remark: 0x01 }}), \
+                 Balances(transfer_keep_alive {{ dest: Id({BOB}), value: 1 }})) }}"
+            ),
+        );
+        assert_eq!(check(&policy, &mixed).unwrap(), Approval::Required);
+
+        // …including a transfer hidden in a community's `dispatch_as_account`.
+        let dispatch = call(
+            &metadata,
+            "Communities",
+            "dispatch_as_account",
+            &format!("{{ call: Balances(transfer_keep_alive {{ dest: Id({BOB}), value: 1 }}) }}"),
+        );
+        assert_eq!(check(&policy, &dispatch).unwrap(), Approval::Required);
+
+        // A call not allowed at all stays rejected.
+        assert!(
+            check(
+                &self::policy(
+                    r#"[[allow]]
+call = "System.remark"
+unattended = true"#
+                ),
+                &transfer(&metadata, BOB, 1)
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn unattended_limits_fall_back_to_approval() {
+        let metadata = metadata();
+        let policy = policy(
+            "[[allow]]\ncall = \"Balances.transfer_keep_alive\"\nunattended = true\n\
+             max = { value = 10 }\n[[allow]]\ncall = \"*\"",
+        );
+        assert_eq!(
+            check(&policy, &transfer(&metadata, BOB, 10)).unwrap(),
+            Approval::Unattended
+        );
+        assert_eq!(
+            check(&policy, &transfer(&metadata, BOB, 11)).unwrap(),
+            Approval::Required
+        );
+    }
+
     #[test]
     fn validates_policies() {
         for bad in [
@@ -395,6 +519,8 @@ pub(crate) mod tests {
             "endpoint = \"wss://kreivo.io\"\n[[allow]]\ncall = \"A.b\"\nto = { dest = [\"nope\"] }",
             "endpoint = \"wss://kreivo.io\"\n[proxy]\nreal = \"nope\"",
             "endpoint = \"wss://kreivo.io\"\nunknown = 1",
+            "endpoint = \"wss://kreivo.io\"\n[[allow]]\ncall = \"*\"\nunattended = true",
+            "endpoint = \"wss://kreivo.io\"\n[[allow]]\ncall = \"*\"\nmax = { value = 1 }",
         ] {
             assert!(Policy::from_toml(bad).is_err(), "accepted: {bad}");
         }

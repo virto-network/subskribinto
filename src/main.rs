@@ -8,6 +8,7 @@ use inquire::{Password, Text};
 use std::path::PathBuf;
 
 mod accounts;
+mod audit;
 mod call;
 pub(crate) mod config;
 mod guard;

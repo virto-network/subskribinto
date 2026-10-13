@@ -1,0 +1,26 @@
+# A policy for an admin account driven by an assistant, without a proxy: community, system and
+# preimage operations are signed unattended; anything else, transfers included, needs your approval
+# (Touch ID on macOS). See docs/policy.md#unattended-rules.
+
+endpoint = "wss://kreivo.io"
+
+# Signed without asking, as long as every call in the transaction matches one of these.
+[[allow]]
+call = "Utility.batch"
+unattended = true
+
+[[allow]]
+call = "Communities.*"
+unattended = true
+
+[[allow]]
+call = "System.*"
+unattended = true
+
+[[allow]]
+call = "Preimage.*"
+unattended = true
+
+# Everything else: allowed, but only with your approval.
+[[allow]]
+call = "*"

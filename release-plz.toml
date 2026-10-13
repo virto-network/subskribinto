@@ -1,0 +1,8 @@
+# Releases with release-plz: https://release-plz.dev/docs/config
+[workspace]
+# CHANGELOG.md is written by hand (see CONTRIBUTING.md): the release PR only bumps versions.
+changelog_update = false
+# Publish only when a release PR is merged, never on ordinary pushes to main.
+release_always = false
+git_release_body = "See [CHANGELOG.md](https://github.com/virto-network/subskribinto/blob/main/CHANGELOG.md) for what changed."
+git_release_generate_notes = true

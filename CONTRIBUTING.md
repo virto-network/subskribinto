@@ -31,6 +31,14 @@ cargo fmt --all --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 cargo deny check advisories   # needs `cargo install cargo-deny`
+scripts/license-headers.sh    # every .rs file starts with the license header
+```
+
+New Rust files need the license header below; `scripts/license-headers.sh --fix` adds it for you.
+
+```rust
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
 ```
 
 Tests must not need a network connection or touch real keys. Use the throwaway accounts in
@@ -53,6 +61,27 @@ When Kreivo's runtime changes, refresh the bundled metadata with
 ```bash
 subxt metadata --url wss://kreivo.io --format bytes > metadata/kreivo.scale
 ```
+
+## Releasing
+
+Releases are automated with [release-plz](https://release-plz.dev) (`.github/workflows/release.yml`):
+
+1. On every push to `main`, release-plz opens or updates a **release PR** that bumps the version in
+   `Cargo.toml` according to the Conventional Commits since the last release.
+2. In that PR, move the entries under *Unreleased* in `CHANGELOG.md` to a section for the new version.
+3. Merging it publishes the crate to crates.io, tags `vX.Y.Z` and creates a GitHub release. Nothing is
+   published from ordinary pushes.
+
+One-time setup, done by a maintainer:
+
+- **First publish by hand**: crates.io only accepts trusted publishing for crates that already exist, so
+  publish the first version with `cargo publish` from a clean checkout of `main`.
+- **Trusted publishing**: on crates.io, under the crate's *Settings → Trusted Publishing*, add the GitHub
+  repository `virto-network/subskribinto` with workflow `release.yml`. No registry token is stored in the
+  repository.
+- **Optional**: add a `RELEASE_PLZ_TOKEN` secret (GitHub App or fine-grained token with contents and
+  pull-requests write access), so CI runs on release PRs. Pull requests opened with the default
+  `GITHUB_TOKEN` don't trigger workflows.
 
 ## License
 

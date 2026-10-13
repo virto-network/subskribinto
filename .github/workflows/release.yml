@@ -1,0 +1,54 @@
+name: Release
+
+# release-plz opens (and keeps up to date) a release PR that bumps the version. Merging it
+# publishes the crate to crates.io, tags the release and creates a GitHub release.
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  release:
+    name: Publish
+    if: github.repository == 'virto-network/subskribinto'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write # crates.io trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5.142
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-pr:
+    name: Release PR
+    if: github.repository == 'virto-network/subskribinto'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5.142
+        with:
+          command: release-pr
+        env:
+          # PRs opened with GITHUB_TOKEN don't trigger CI. Set RELEASE_PLZ_TOKEN (a GitHub App or
+          # fine-grained token with contents and pull-requests write) so they do.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}

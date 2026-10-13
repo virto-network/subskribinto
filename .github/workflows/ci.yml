@@ -28,6 +28,8 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all --check
+      - name: License headers
+        run: scripts/license-headers.sh
 
   clippy:
     name: Clippy
@@ -52,6 +54,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # What `cargo install subskribinto` would build from crates.io.
+      - run: cargo publish --dry-run --locked
 
   advisories:
     name: Security advisories

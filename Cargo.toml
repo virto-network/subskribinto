@@ -8,6 +8,7 @@ repository = "https://github.com/virto-network/subskribinto"
 readme = "README.md"
 keywords = ["kreivo", "substrate", "polkadot", "signer", "cli"]
 categories = ["command-line-utilities", "cryptography::cryptocurrencies"]
+exclude = [".github/", "scripts/", "deny.toml", "release-plz.toml"]
 
 [dependencies]
 anyhow = "1.0.98"

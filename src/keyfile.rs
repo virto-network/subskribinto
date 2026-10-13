@@ -1,3 +1,6 @@
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
+
 //! Decoding of JSON key files exported by polkadot{.js} (extension, apps, keyring).
 //!
 //! The `encoded` field holds, for the current (v3) format:

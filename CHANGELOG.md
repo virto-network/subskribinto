@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `--scheme sr25519|ed25519` for `--phrase` and `--seed`.
 - `--call-data` and `--call-data-file` as aliases of `--call` and `--call-file`.
 - Transactions are followed until finalization, printing their block and events.
+- Published to crates.io (`cargo install subskribinto`), with releases automated by release-plz.
 
 ### Fixed
 

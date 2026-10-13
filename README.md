@@ -47,6 +47,14 @@ The tool walks you through four steps:
 
 ## 📦 Installation
 
+From [crates.io](https://crates.io/crates/subskribinto):
+
+```bash
+cargo install --locked subskribinto
+```
+
+Or the latest `main`:
+
 ```bash
 cargo install --locked --git https://github.com/virto-network/subskribinto.git
 ```

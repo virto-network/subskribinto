@@ -1,7 +1,7 @@
+use ::sp_core::{Pair as _, ed25519, sr25519};
 use bip39::Mnemonic;
 use clap::{Args, Parser, ValueEnum};
 use inquire::{Password, Text};
-use ::sp_core::{ed25519, sr25519, Pair as _};
 use std::path::PathBuf;
 
 pub(crate) mod config;
@@ -98,8 +98,12 @@ impl SigningChoice {
                 };
                 let invalid = |e| anyhow::anyhow!("Invalid mnemonic or derivation path: {e}");
                 Ok(match scheme {
-                    Scheme::Sr25519 => sr25519::Pair::from_string(&uri, None).map_err(invalid)?.into(),
-                    Scheme::Ed25519 => ed25519::Pair::from_string(&uri, None).map_err(invalid)?.into(),
+                    Scheme::Sr25519 => sr25519::Pair::from_string(&uri, None)
+                        .map_err(invalid)?
+                        .into(),
+                    Scheme::Ed25519 => ed25519::Pair::from_string(&uri, None)
+                        .map_err(invalid)?
+                        .into(),
                 })
             }
             SigningChoice::Seed { hex_seed, scheme } => {

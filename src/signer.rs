@@ -5,6 +5,8 @@ use sp_core::{
 };
 use subxt::{Config, tx::Signer, utils::MultiSignature};
 
+// At most a couple of signers exist per run, so their size doesn't matter.
+#[allow(clippy::large_enum_variant)]
 pub enum PairSigner {
     Sr25519(sr25519::Pair),
     Ed25519(ed25519::Pair),
@@ -38,7 +40,11 @@ impl std::fmt::Debug for PairSigner {
             Self::Sr25519(_) => "Sr25519",
             Self::Ed25519(_) => "Ed25519",
         };
-        write!(f, "PairSigner::{scheme}({})", self.account_id().to_ss58check())
+        write!(
+            f,
+            "PairSigner::{scheme}({})",
+            self.account_id().to_ss58check()
+        )
     }
 }
 

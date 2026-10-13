@@ -1,0 +1,8 @@
+# cargo-deny configuration: https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# Vulnerabilities and unsound crates anywhere in the tree fail the check. Unmaintained crates only do
+# when we depend on them directly: the transitive ones come from the Polkadot SDK and Subxt, and have
+# no maintained release to move to yet.
+unmaintained = "workspace"
+ignore = []

@@ -51,7 +51,10 @@ pub async fn sign_and_submit(
         .sign_and_submit_then_watch_default(&call, &signer)
         .await?;
 
-    println!("Transaction submitted with hash {:?}", progress.extrinsic_hash());
+    println!(
+        "Transaction submitted with hash {:?}",
+        progress.extrinsic_hash()
+    );
 
     while let Some(status) = progress.next().await {
         match status? {

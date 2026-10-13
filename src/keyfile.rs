@@ -154,7 +154,10 @@ impl KeyFile {
         if !self.is_encrypted() {
             return Ok(encoded);
         }
-        ensure!(!password.is_empty(), "A password is required to unlock this key file");
+        ensure!(
+            !password.is_empty(),
+            "A password is required to unlock this key file"
+        );
 
         let mut data = encoded.as_slice();
         let mut key = [0u8; 32];
@@ -206,7 +209,10 @@ fn decode_pkcs8(pkcs8: &[u8]) -> anyhow::Result<(&[u8], &[u8])> {
             continue;
         };
         if let Some(public) = rest.strip_prefix(PKCS8_DIVIDER.as_slice()) {
-            ensure!(public.len() >= PUBLIC_KEY_LENGTH, "Truncated public key in decrypted key");
+            ensure!(
+                public.len() >= PUBLIC_KEY_LENGTH,
+                "Truncated public key in decrypted key"
+            );
             return Ok((secret, &public[..PUBLIC_KEY_LENGTH]));
         }
     }
@@ -217,8 +223,9 @@ fn decode_pkcs8(pkcs8: &[u8]) -> anyhow::Result<(&[u8], &[u8])> {
 /// mini secret (seed) or a 64-byte secret key in schnorrkel's ed25519 layout.
 pub fn sr25519_from_secret(secret: &[u8]) -> anyhow::Result<sr25519::Pair> {
     match secret.len() {
-        SEED_LENGTH => sr25519::Pair::from_seed_slice(secret)
-            .map_err(|e| anyhow!("Invalid sr25519 seed: {e}")),
+        SEED_LENGTH => {
+            sr25519::Pair::from_seed_slice(secret).map_err(|e| anyhow!("Invalid sr25519 seed: {e}"))
+        }
         SECRET_KEY_LENGTH => schnorrkel::SecretKey::from_ed25519_bytes(secret)
             .map(sr25519::Pair::from)
             .map_err(|e| anyhow!("Invalid sr25519 secret key: {e}")),
@@ -233,7 +240,8 @@ mod tests {
     const SR25519_FILE: &str = include_str!("../fixtures/pjs-sr25519.json");
     const ED25519_FILE: &str = include_str!("../fixtures/pjs-ed25519.json");
     // Throwaway test account, created only for these fixtures.
-    const PHRASE: &str = "exact step odor long figure buffalo cereal army shallow social similar shaft";
+    const PHRASE: &str =
+        "exact step odor long figure buffalo cereal army shallow social similar shaft";
     const PASSWORD: &str = "testacct";
 
     #[test]
@@ -249,9 +257,15 @@ mod tests {
         );
         assert_eq!(signer.account_id(), AccountId32::from(expected.public()));
 
-        let PairSigner::Sr25519(pair) = signer else { unreachable!() };
+        let PairSigner::Sr25519(pair) = signer else {
+            unreachable!()
+        };
         let signature = pair.sign(b"payload");
-        assert!(sr25519::Pair::verify(&signature, b"payload", &expected.public()));
+        assert!(sr25519::Pair::verify(
+            &signature,
+            b"payload",
+            &expected.public()
+        ));
     }
 
     #[test]
@@ -282,7 +296,10 @@ mod tests {
             "5H6HuzccfPDestVUFEeaNBbRCT9tCbGH1Cp1XT1DDzj3Yeq3",
             "5F99BTMyMj5szz7zvhHpSi5QC5uj4DCtTszoHz8m1oer65gA",
         );
-        let err = KeyFile::from_json(&json).unwrap().unlock(PASSWORD).unwrap_err();
+        let err = KeyFile::from_json(&json)
+            .unwrap()
+            .unlock(PASSWORD)
+            .unwrap_err();
         assert!(err.to_string().contains("but the file is for"), "{err}");
     }
 

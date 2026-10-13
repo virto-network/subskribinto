@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/virto-network/subskribinto/releases/tag/v0.2.2) - 2026-10-13
+
+### Other
+
+- *(deps)* Bump bip39 from 2.1.0 to 3.0.0 ([#14](https://github.com/virto-network/subskribinto/pull/14))
+- *(deps)* Bump inquire from 0.7.5 to 0.9.4 ([#13](https://github.com/virto-network/subskribinto/pull/13))
+- *(deps)* Bump base64 from 0.22.1 to 0.23.1 ([#16](https://github.com/virto-network/subskribinto/pull/16))
+- *(deps)* Bump the minor-and-patch group across 1 directory with 6 updates ([#12](https://github.com/virto-network/subskribinto/pull/12))
+- *(deps)* Bump actions/checkout from 5 to 7 in the actions group ([#11](https://github.com/virto-network/subskribinto/pull/11))
+- *(deps)* Bump scrypt from 0.11.0 to 0.12.0 ([#15](https://github.com/virto-network/subskribinto/pull/15))
+
 ## [0.2.1](https://github.com/virto-network/subskribinto/releases/tag/v0.2.1) - 2026-10-13
 
 ### Added

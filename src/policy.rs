@@ -370,6 +370,22 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn documented_policy_is_valid() {
+        let doc = include_str!("../docs/policy.md");
+        let example = doc
+            .split("```toml\n")
+            .nth(1)
+            .and_then(|block| block.split("```").next())
+            .expect("docs/policy.md starts with a TOML example");
+        let policy = Policy::from_toml(example).unwrap();
+        assert_eq!(
+            policy.proxy.unwrap().proxy_type.as_deref(),
+            Some("NonTransfer")
+        );
+        assert_eq!(policy.allow[0].max["value"], Amount(10_000_000_000_000));
+    }
+
+    #[test]
     fn validates_policies() {
         for bad in [
             "endpoint = \"https://kreivo.io\"",

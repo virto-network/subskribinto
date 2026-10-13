@@ -99,7 +99,8 @@ Three guards stand between the assistant and a signature:
 1. **A policy per account**, stored in the keystore next to the key (so editing files can't loosen
    it). It pins the endpoint and lists the calls the account may sign, with optional caps
    (`max`) and recipient allowlists (`to`). Calls nested in batches or proxies are checked too;
-   anything not allowed is rejected before you're asked.
+   anything not allowed is rejected before you're asked. See the
+   [policy reference](docs/policy.md).
 2. **Your approval for every signature**, shown in the MCP client and, on macOS, through Touch ID
    or your account password: something the assistant can't provide. Changing or removing an
    account needs the same approval.
@@ -111,7 +112,7 @@ Three guards stand between the assistant and a signature:
 ### Setting it up
 
 ```bash
-# 1. Write a policy (see examples/policy.toml), then store the account with it.
+# 1. Write a policy (see docs/policy.md and examples/policy.toml), then store the account with it.
 subskribinto accounts add ops --key-file ./ops.json --policy ./policy.toml
 
 # 2. Check what's stored. Secrets are never printed.

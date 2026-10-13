@@ -1,95 +1,193 @@
 // Copyright (c) Virto Network
 // SPDX-License-Identifier: MIT
 
-use super::*;
+//! Connecting to a chain, and signing, submitting and following transactions.
 
-use ::sp_core::crypto::Ss58Codec;
-use subxt::{
-    dynamic::Value,
-    ext::{
-        scale_decode::DecodeAsType,
-        scale_value::{Composite, ValueDef, Variant},
-    },
-    tx::{DefaultPayload, TxStatus},
-};
+use anyhow::{anyhow, bail, ensure};
+use schemars::JsonSchema;
+use serde::Serialize;
+use subxt::{OnlineClient, tx::TxStatus};
 
+use crate::{call::DecodedCall, config::KreivoConfig, signer::PairSigner};
+
+pub type Api = OnlineClient<KreivoConfig>;
+
+pub async fn connect(endpoint: &str) -> anyhow::Result<Api> {
+    Api::from_url(endpoint)
+        .await
+        .map_err(|e| anyhow!("Cannot connect to {endpoint}: {e}"))
+}
+
+/// Intermediate steps of a submission, for callers that report progress.
+pub enum Progress<'a> {
+    Submitted { tx_hash: &'a str },
+    InBlock { block_hash: &'a str },
+}
+
+/// A finalized transaction.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct Outcome {
+    pub tx_hash: String,
+    pub block_hash: String,
+    pub extrinsic_index: u32,
+    /// The events the transaction emitted, as `Pallet.Event { fields }`.
+    pub events: Vec<String>,
+}
+
+/// Sign `call` exactly as decoded, submit it, and follow it until it is finalized.
+/// Fails if it is invalid, dropped, or dispatched with an error.
 pub async fn sign_and_submit(
-    signing: SigningChoice,
-    call_bytes: Vec<u8>,
-    endpoint: &str,
-) -> anyhow::Result<()> {
-    let signer = signing.try_into_signer()?;
-    println!("Signing as {}", signer.account_id().to_ss58check());
-    let api = subxt::OnlineClient::<config::KreivoConfig>::from_url(endpoint).await?;
-
-    // Now we decode using metadata.
-    let metadata = api.metadata();
-    let call_ty = metadata.outer_enums().call_enum_ty();
-    let call_value = Value::decode_as_type(&mut call_bytes.as_ref(), call_ty, metadata.types())?;
-    let ValueDef::Variant(Variant {
-        name: pallet_name,
-        values: Composite::Unnamed(v),
-    }) = call_value.value
-    else {
-        Err(anyhow::Error::msg(
-            "It was not possible to parse value as pallet enum",
-        ))?
-    };
-    let Some(ValueDef::Variant(Variant {
-        name: call_name,
-        values: fields,
-    })) = v.first().map(|v| v.clone().value)
-    else {
-        Err(anyhow::Error::msg(
-            "It was not possible to parse value as call enum",
-        ))?
-    };
-
-    let call = DefaultPayload::new(&pallet_name, &call_name, fields);
-
-    println!("Submitting {pallet_name}::{call_name}(<stripped>)");
-
-    let mut progress = api
-        .tx()
-        .sign_and_submit_then_watch_default(&call, &signer)
-        .await?;
-
-    println!(
-        "Transaction submitted with hash {:?}",
-        progress.extrinsic_hash()
+    api: &Api,
+    call: &DecodedCall,
+    signer: &PairSigner,
+    mut progress: impl FnMut(Progress<'_>),
+) -> anyhow::Result<Outcome> {
+    let payload = call.payload()?;
+    ensure!(
+        api.tx().call_data(&payload)? == call.bytes(),
+        "The call would not be signed exactly as decoded; refusing to sign it"
     );
 
-    while let Some(status) = progress.next().await {
+    let mut tx = api
+        .tx()
+        .sign_and_submit_then_watch_default(&payload, signer)
+        .await?;
+    let tx_hash = format!("{:?}", tx.extrinsic_hash());
+    progress(Progress::Submitted { tx_hash: &tx_hash });
+
+    while let Some(status) = tx.next().await {
         match status? {
             TxStatus::InBestBlock(block) => {
-                println!("Transaction included in block {:?}", block.block_hash());
+                progress(Progress::InBlock {
+                    block_hash: &format!("{:?}", block.block_hash()),
+                });
             }
             TxStatus::InFinalizedBlock(block) => {
                 let events = block.wait_for_success().await?;
-                println!(
-                    "Transaction finalized in block {:?} (extrinsic #{})",
-                    block.block_hash(),
-                    events.extrinsic_index()
-                );
+                let mut descriptions = Vec::new();
                 for event in events.iter() {
                     let event = event?;
-                    println!(
-                        "  {}::{} {}",
+                    descriptions.push(format!(
+                        "{}.{} {}",
                         event.pallet_name(),
                         event.variant_name(),
-                        event.field_values()?
-                    );
+                        call.describe_fields(event.field_values()?)
+                    ));
                 }
-                return Ok(());
+                return Ok(Outcome {
+                    tx_hash,
+                    block_hash: format!("{:?}", block.block_hash()),
+                    extrinsic_index: events.extrinsic_index(),
+                    events: descriptions,
+                });
             }
             TxStatus::Error { message }
             | TxStatus::Invalid { message }
-            | TxStatus::Dropped { message } => {
-                anyhow::bail!("Transaction failed: {message}")
-            }
+            | TxStatus::Dropped { message } => bail!("Transaction failed: {message}"),
             _ => {}
         }
     }
 
-    anyhow::bail!("Lost track of the transaction before it was finalized")
+    bail!("Lost track of the transaction before it was finalized")
+}
+
+#[cfg(test)]
+mod tests {
+    //! Against a local dev chain: run `polkadot --dev --tmp --rpc-port 19944` (or point
+    //! `SUBSKRIBINTO_DEV_NODE` at another dev node), then `cargo test -- --ignored`.
+
+    use sp_core::{Pair as _, sr25519};
+
+    use super::*;
+    use crate::{
+        guard::Request,
+        policy::{
+            Policy,
+            tests::{ALICE, BOB, CHARLIE},
+        },
+        store::AccountRecord,
+    };
+
+    fn dev(name: &str) -> PairSigner {
+        sr25519::Pair::from_string(&format!("//{name}"), None)
+            .unwrap()
+            .into()
+    }
+
+    fn endpoint() -> String {
+        std::env::var("SUBSKRIBINTO_DEV_NODE").unwrap_or_else(|_| "ws://127.0.0.1:19944".into())
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a local dev chain"]
+    async fn signs_through_a_proxy_on_a_dev_chain() {
+        let api = connect(&endpoint()).await.unwrap();
+        let metadata = api.metadata();
+
+        // Alice makes Bob her proxy.
+        let add_proxy = DecodedCall::encode(
+            &metadata,
+            "Proxy",
+            "add_proxy",
+            Some(&format!(
+                "{{ delegate: Id({BOB}), proxy_type: Any(), delay: 0 }}"
+            )),
+        )
+        .unwrap();
+        // Already a proxy if the test ran before against the same chain.
+        if let Err(e) = sign_and_submit(&api, &add_proxy, &dev("Alice"), |_| {}).await {
+            assert!(format!("{e:#}").contains("Duplicate"), "{e:#}");
+        }
+
+        // Bob is stored with a policy that only allows small transfers to Charlie, for Alice.
+        let record = || {
+            let policy = Policy::from_toml(&format!(
+                "endpoint = \"{}\"\n\
+                 [proxy]\nreal = \"{ALICE}\"\ntype = \"Any\"\n\
+                 [[allow]]\ncall = \"Balances.transfer_keep_alive\"\n\
+                 max = {{ value = 1000000000000 }}\nto = {{ dest = [\"{CHARLIE}\"] }}",
+                endpoint()
+            ))
+            .unwrap();
+            AccountRecord::new("bob".into(), &dev("Bob"), policy).unwrap()
+        };
+        let transfer = |value: u128| {
+            DecodedCall::encode(
+                &metadata,
+                "Balances",
+                "transfer_keep_alive",
+                Some(&format!("{{ dest: Id({CHARLIE}), value: {value} }}")),
+            )
+            .unwrap()
+        };
+
+        let too_much =
+            Request::new(record(), &metadata, transfer(2_000_000_000_000).bytes()).unwrap();
+        assert!(too_much.check().is_err());
+
+        let request = Request::new(record(), &metadata, transfer(1_000_000_000).bytes()).unwrap();
+        request.check().unwrap();
+        let signer = request.account.signer().unwrap();
+        let outcome = sign_and_submit(&api, &request.signed, &signer, |_| {})
+            .await
+            .unwrap();
+
+        println!("{outcome:#?}");
+        assert!(
+            outcome
+                .events
+                .iter()
+                .any(|e| e.starts_with("Proxy.ProxyExecuted") && e.contains("Ok")),
+            "{outcome:#?}"
+        );
+        assert!(
+            outcome
+                .events
+                .iter()
+                .any(|e| e.starts_with("Balances.Transfer")
+                    && e.contains(ALICE)
+                    && e.contains(CHARLIE)),
+            "the transfer must come from Alice: {outcome:#?}"
+        );
+    }
 }

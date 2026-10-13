@@ -14,6 +14,13 @@ The first release published to crates.io (`cargo install subskribinto`).
 
 ### Added
 
+- Stored accounts in the system keystore (`subskribinto accounts add|list|show|policy|remove`), each with a
+  policy that pins its endpoint, lists the calls it may sign (with caps and recipient allowlists, checked
+  through nested calls) and can sign as a proxy of another account.
+- `subskribinto mcp`: a stdio MCP server that lets AI assistants list stored accounts, build and inspect calls,
+  and submit them after the policy allows them and the user approves (MCP elicitation, plus Touch ID or the
+  account password on macOS).
+- `--account <name>` to sign with a stored account from the command line, under the same policy and approval.
 - `--key-file` to sign with a JSON key file exported by polkadot{.js} (extension, apps or keyring).
 - `--scheme sr25519|ed25519` for `--phrase` and `--seed`.
 - `--call-data` and `--call-data-file` as aliases of `--call` and `--call-file`.

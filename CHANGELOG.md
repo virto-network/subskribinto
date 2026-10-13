@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/virto-network/subskribinto/releases/tag/v0.2.1) - 2026-10-13
+
+### Added
+
+- Unattended policy rules for signing without approval ([#19](https://github.com/virto-network/subskribinto/pull/19))
+
+### Documentation
+
+- Add a policy reference ([#17](https://github.com/virto-network/subskribinto/pull/17))
+
 ## [0.2.0](https://github.com/virto-network/subskribinto/releases/tag/v0.2.0)
 
 The first release published to crates.io (`cargo install subskribinto`).

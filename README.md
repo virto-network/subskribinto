@@ -129,7 +129,8 @@ cargo build --release --target x86_64-unknown-linux-musl
 ## 🤝 Contributing
 
 Issues and pull requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build,
-test and propose changes, and the [CHANGELOG](CHANGELOG.md) for what changed recently. Everyone taking
+test and propose changes, the [CHANGELOG](CHANGELOG.md) for what changed recently, and
+[RELEASING.md](RELEASING.md) for how releases are cut. Everyone taking
 part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 🔒 Security

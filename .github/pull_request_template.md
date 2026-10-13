@@ -13,5 +13,6 @@
 ## Checklist
 
 - [ ] `cargo fmt`, `cargo clippy` and `cargo test` pass locally
-- [ ] README and CHANGELOG (under *Unreleased*) updated, if users would notice the change
+- [ ] PR title follows Conventional Commits (`feat:`, `fix:`, `feat!:` for breaking …): it becomes the changelog entry
+- [ ] README updated, if users would notice the change
 - [ ] No real secrets (mnemonics, seeds, key files, passwords) anywhere in the diff

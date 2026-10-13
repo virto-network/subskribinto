@@ -1,11 +1,16 @@
 # Changelog
 
-All notable changes to this project are documented in this file.
+All notable changes to this project are documented in this file. See
+[CONTRIBUTING.md](./CONTRIBUTING.md#changelog) for how this file is maintained.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.2.0](https://github.com/virto-network/subskribinto/releases/tag/v0.2.0)
+
+The first release published to crates.io (`cargo install subskribinto`).
 
 ### Added
 
@@ -13,7 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `--scheme sr25519|ed25519` for `--phrase` and `--seed`.
 - `--call-data` and `--call-data-file` as aliases of `--call` and `--call-file`.
 - Transactions are followed until finalization, printing their block and events.
-- Published to crates.io (`cargo install subskribinto`), with releases automated by release-plz.
 
 ### Fixed
 
@@ -29,11 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `jsubskribinto` (the Deno port) and the `pjs_decode` script: the Rust CLI covers both now.
 
-## [0.1.0] - 2025-05-26
+## [0.1.0](https://github.com/virto-network/subskribinto/commit/438f17f) - 2025-05-26
+
+Not published.
 
 ### Added
 
 - Interactive and non-interactive signing of Kreivo extrinsics from a mnemonic or a hex seed.
-
-[Unreleased]: https://github.com/virto-network/subskribinto/compare/438f17f...HEAD
-[0.1.0]: https://github.com/virto-network/subskribinto/commit/438f17f

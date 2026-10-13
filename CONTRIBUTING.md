@@ -47,11 +47,28 @@ Tests must not need a network connection or touch real keys. Use the throwaway a
 ## Pull requests
 
 - Keep each pull request focused on one change, and describe *why* it is needed, not only what it does.
-- Add or update tests for behaviour changes, and update the [README](README.md) and
-  [CHANGELOG](CHANGELOG.md) (under *Unreleased*) when users would notice the change.
-- Write commit messages in the [Conventional Commits](https://www.conventionalcommits.org/) style used in
-  the history (`feat:`, `fix:`, `chore:`, `docs:` …).
+- Add or update tests for behaviour changes, and update the [README](README.md) when users would
+  notice the change.
+- **Title the pull request in the [Conventional Commits](https://www.conventionalcommits.org/) style**
+  (see below). CI checks it.
 - Never commit real secrets: mnemonics, seeds, key files or passwords of accounts that hold value.
+
+### Pull request titles
+
+Pull requests are squash-merged, so **the PR title becomes the commit on `main`, the line in the
+changelog and the input to the next version bump.**
+
+| Title | Next release | Changelog section |
+| --- | --- | --- |
+| `feat!: rename --call-file to --call-data-file` | **breaking** | ⚠ Breaking changes |
+| `feat(mcp): add a tool to list pending requests` | feature | Added |
+| `fix(keyfile): accept hex-encoded key files` | patch | Fixed |
+| `perf(...)`, `refactor(...)`, `docs(...)`, `chore(...)` | patch | Performance / Changed / Documentation / Other |
+| `test(...)`, `ci(...)`, `style(...)` | patch | *(not listed)* |
+
+The description is imperative and lowercase, and reads well as a changelog entry. `!` marks a
+breaking change: a removed or renamed flag or subcommand, or an incompatible policy or keystore
+format. Explain in the PR description what users have to do.
 
 ## Updating the metadata
 
@@ -62,26 +79,11 @@ When Kreivo's runtime changes, refresh the bundled metadata with
 subxt metadata --url wss://kreivo.io --format bytes > metadata/kreivo.scale
 ```
 
-## Releasing
+## Changelog
 
-Releases are automated with [release-plz](https://release-plz.dev) (`.github/workflows/release.yml`):
-
-1. On every push to `main`, release-plz opens or updates a **release PR** that bumps the version in
-   `Cargo.toml` according to the Conventional Commits since the last release.
-2. In that PR, move the entries under *Unreleased* in `CHANGELOG.md` to a section for the new version.
-3. Merging it publishes the crate to crates.io, tags `vX.Y.Z` and creates a GitHub release. Nothing is
-   published from ordinary pushes.
-
-One-time setup, done by a maintainer:
-
-- **First publish by hand**: crates.io only accepts trusted publishing for crates that already exist, so
-  publish the first version with `cargo publish` from a clean checkout of `main`.
-- **Trusted publishing**: on crates.io, under the crate's *Settings → Trusted Publishing*, add the GitHub
-  repository `virto-network/subskribinto` with workflow `release.yml`. No registry token is stored in the
-  repository.
-- **Optional**: add a `RELEASE_PLZ_TOKEN` secret (GitHub App or fine-grained token with contents and
-  pull-requests write access), so CI runs on release PRs. Pull requests opened with the default
-  `GITHUB_TOKEN` don't trigger workflows.
+`CHANGELOG.md` has one section per release and is written by the release workflow, from the
+titles of the pull requests merged since the last release, so you **don't edit it in feature PRs**.
+A maintainer curates each section before releasing; see [RELEASING.md](RELEASING.md).
 
 ## License
 

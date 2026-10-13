@@ -1,8 +1,21 @@
-# Releases with release-plz: https://release-plz.dev/docs/config
+# release-plz configuration — see RELEASING.md. Set up like the other Virto crates.
+#
+# release-plz does not write the changelog: ./CHANGELOG.md is written by git-cliff (cliff.toml) in
+# the release workflow, and the GitHub release is created from that curated section. The version is
+# bumped from the conventional commit titles on `main`:
+#
+#   feat!: / fix!: / `BREAKING CHANGE:` footer -> major (minor while the version is 0.x)
+#   feat:                                       -> minor (patch while the version is 0.x)
+#   anything else                               -> patch
+#
+# `semver_check` is off: the crate is a CLI, and its library only re-exports the Kreivo API that
+# Subxt generates from the bundled metadata, so cargo-semver-checks would flag every runtime upgrade.
+
 [workspace]
-# CHANGELOG.md is written by hand (see CONTRIBUTING.md): the release PR only bumps versions.
 changelog_update = false
-# Publish only when a release PR is merged, never on ordinary pushes to main.
-release_always = false
-git_release_body = "See [CHANGELOG.md](https://github.com/virto-network/subskribinto/blob/main/CHANGELOG.md) for what changed."
-git_release_generate_notes = true
+git_release_enable = false
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+semver_check = false
+pr_name = "chore: release v{{ version }}"
+pr_labels = ["release"]

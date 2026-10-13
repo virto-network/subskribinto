@@ -1,13 +1,13 @@
 use super::*;
 
-use signer::PairSigner;
+use ::sp_core::crypto::Ss58Codec;
 use subxt::{
     dynamic::Value,
     ext::{
         scale_decode::DecodeAsType,
         scale_value::{Composite, ValueDef, Variant},
     },
-    tx::DefaultPayload,
+    tx::{DefaultPayload, TxStatus},
 };
 
 pub async fn sign_and_submit(
@@ -15,7 +15,8 @@ pub async fn sign_and_submit(
     call_bytes: Vec<u8>,
     endpoint: &str,
 ) -> anyhow::Result<()> {
-    let signer: PairSigner = signing.try_into_keypair()?.into();
+    let signer = signing.try_into_signer()?;
+    println!("Signing as {}", signer.account_id().to_ss58check());
     let api = subxt::OnlineClient::<config::KreivoConfig>::from_url(endpoint).await?;
 
     // Now we decode using metadata.
@@ -45,9 +46,47 @@ pub async fn sign_and_submit(
 
     println!("Submitting {pallet_name}::{call_name}(<stripped>)");
 
-    let tx_hash = api.tx().sign_and_submit_default(&call, &signer).await?;
+    let mut progress = api
+        .tx()
+        .sign_and_submit_then_watch_default(&call, &signer)
+        .await?;
 
-    println!("Transaction submitted with hash {tx_hash}");
+    println!(
+        "Transaction submitted with hash {:?}",
+        progress.extrinsic_hash()
+    );
 
-    Ok(())
+    while let Some(status) = progress.next().await {
+        match status? {
+            TxStatus::InBestBlock(block) => {
+                println!("Transaction included in block {:?}", block.block_hash());
+            }
+            TxStatus::InFinalizedBlock(block) => {
+                let events = block.wait_for_success().await?;
+                println!(
+                    "Transaction finalized in block {:?} (extrinsic #{})",
+                    block.block_hash(),
+                    events.extrinsic_index()
+                );
+                for event in events.iter() {
+                    let event = event?;
+                    println!(
+                        "  {}::{} {}",
+                        event.pallet_name(),
+                        event.variant_name(),
+                        event.field_values()?
+                    );
+                }
+                return Ok(());
+            }
+            TxStatus::Error { message }
+            | TxStatus::Invalid { message }
+            | TxStatus::Dropped { message } => {
+                anyhow::bail!("Transaction failed: {message}")
+            }
+            _ => {}
+        }
+    }
+
+    anyhow::bail!("Lost track of the transaction before it was finalized")
 }

@@ -1,29 +1,53 @@
 // Copyright (c) Virto Network
 // SPDX-License-Identifier: MIT
 
-use ::sp_core::{Pair as _, ed25519, sr25519};
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
+
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
+
+use ::sp_core::{Pair as _, crypto::Ss58Codec, ed25519, sr25519};
 use bip39::Mnemonic;
-use clap::{Args, Parser, ValueEnum};
+use clap::{Args, Parser, Subcommand};
 use inquire::{Password, Text};
 use std::path::PathBuf;
 
+mod accounts;
+mod call;
 pub(crate) mod config;
+mod guard;
 pub(crate) mod keyfile;
+mod mcp;
+mod policy;
+mod presence;
 pub(crate) mod signer;
+mod store;
 mod tx;
 
+use call::DecodedCall;
 use keyfile::KeyFile;
-use signer::PairSigner;
+use signer::{PairSigner, Scheme};
+use store::{Accounts, OsKeystore};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Step‑based extrinsic signer & submitter", long_about = None)]
+#[command(args_conflicts_with_subcommands = true)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// WebSocket endpoint (e.g. wss://rpc.polkadot.io)
     #[arg(long, short = 'e')]
     endpoint: Option<String>,
 
     #[command(flatten)]
     signing: SigningArgs,
+
+    /// Sign with an account stored with `subskribinto accounts add`, subject to its policy and
+    /// your approval
+    #[arg(long, value_name = "NAME", conflicts_with_all = ["phrase", "seed", "key_file", "path"])]
+    account: Option<String>,
 
     /// Hex‑encoded call data (0x…)
     #[arg(long, alias = "call-data", value_name = "HEX")]
@@ -34,8 +58,17 @@ struct Cli {
     call_file: Option<PathBuf>,
 }
 
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Manage accounts kept in the system keystore (Keychain, Credential Manager, Secret Service)
+    #[command(subcommand)]
+    Accounts(accounts::AccountsCommand),
+    /// Serve the stored accounts to AI assistants as an MCP server over stdio
+    Mcp,
+}
+
 #[derive(Debug, Args)]
-struct SigningArgs {
+pub(crate) struct SigningArgs {
     /// BIP‑39 mnemonic phrase (will supersede --seed and --key-file if supplied)
     #[arg(long)]
     phrase: Option<String>,
@@ -59,14 +92,8 @@ struct SigningArgs {
     scheme: Scheme,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum Scheme {
-    Sr25519,
-    Ed25519,
-}
-
 #[derive(Debug)]
-enum SigningChoice {
+pub(crate) enum SigningChoice {
     Mnemonic {
         phrase: String,
         derive_path: Option<String>,
@@ -84,7 +111,7 @@ enum SigningChoice {
 
 impl SigningChoice {
     /// Convert `SigningChoice` into a signer ready for signing extrinsics.
-    fn try_into_signer(&self) -> anyhow::Result<PairSigner> {
+    pub(crate) fn try_into_signer(&self) -> anyhow::Result<PairSigner> {
         match self {
             SigningChoice::Mnemonic {
                 phrase,
@@ -127,26 +154,49 @@ impl SigningChoice {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    match cli.command {
+        Some(Command::Accounts(command)) => {
+            return accounts::run(&Accounts::new(OsKeystore), command).await;
+        }
+        Some(Command::Mcp) => return mcp::serve(Accounts::new(OsKeystore)).await,
+        None => {}
+    }
+
+    if let Some(name) = cli.account {
+        let call_bytes = read_call(cli.call, cli.call_file)?;
+        let accounts = Accounts::new(OsKeystore);
+        return accounts::sign_with_stored(&accounts, &name, cli.endpoint.as_deref(), &call_bytes)
+            .await;
+    }
+
     let endpoint = match cli.endpoint {
         Some(ep) => ep,
         None => Text::new("WebSocket endpoint URL?").prompt()?,
     };
 
-    let signing_choice = resolve_signing_choice(cli.signing)?;
+    let signer = resolve_signing_choice(cli.signing)?.try_into_signer()?;
+    let call_bytes = read_call(cli.call, cli.call_file)?;
 
-    let call_bytes = {
-        let call_hex = match (cli.call, cli.call_file) {
-            (Some(data), _) => data,
-            (_, Some(path)) => std::fs::read(path).map(hex::encode)?,
-            (_, _) => Text::new("Hex‑encoded call data (0x…)?").prompt()?,
-        };
+    println!("Signing as {}", signer.account_id().to_ss58check());
+    let api = tx::connect(&endpoint).await?;
+    let call = DecodedCall::decode(&api.metadata(), &call_bytes)?;
+    println!("Submitting {}", call.describe());
 
-        hex::decode(call_hex.trim_start_matches("0x"))?
-    };
-
-    tx::sign_and_submit(signing_choice, call_bytes, &endpoint).await?;
+    let outcome = tx::sign_and_submit(&api, &call, &signer, accounts::print_progress).await?;
+    accounts::print_outcome(&outcome);
 
     Ok(())
+}
+
+/// The call data, from `--call`, `--call-file` or a prompt.
+fn read_call(call: Option<String>, call_file: Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
+    let call_hex = match (call, call_file) {
+        (Some(data), _) => data,
+        (_, Some(path)) => std::fs::read(path).map(hex::encode)?,
+        (_, _) => Text::new("Hex‑encoded call data (0x…)?").prompt()?,
+    };
+
+    Ok(hex::decode(call_hex.trim_start_matches("0x"))?)
 }
 
 /// Validate a BIP‑39 mnemonic; returns error if checksum / wordlist mismatch
@@ -156,7 +206,7 @@ fn ensure_valid_mnemonic(phrase: &str) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Invalid BIP‑39 mnemonic: {e}"))
 }
 
-fn resolve_signing_choice(args: SigningArgs) -> anyhow::Result<SigningChoice> {
+pub(crate) fn resolve_signing_choice(args: SigningArgs) -> anyhow::Result<SigningChoice> {
     let scheme = args.scheme;
     match (args.phrase, args.seed, args.key_file) {
         (Some(phrase), _, _) => Ok(SigningChoice::Mnemonic {

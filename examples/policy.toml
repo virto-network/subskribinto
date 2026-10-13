@@ -1,0 +1,30 @@
+# Policy for a stored account: `subskribinto accounts add <name> --policy policy.toml`, or
+# `subskribinto accounts policy <name> policy.toml` to replace an existing one.
+#
+# Everything not allowed here is rejected, including calls nested in batches or proxies.
+
+# The only node this account talks to.
+endpoint = "wss://kreivo.io"
+
+# Recommended: make the stored key a restricted proxy of the account that holds the funds
+# (`Proxy.add_proxy` from that account), and sign every call through it.
+[proxy]
+real = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+# type = "Any"   # force a specific ProxyType; the chain picks one when omitted
+
+# Transfers of at most 10 KSM (12 decimals), to two known accounts only.
+[[allow]]
+call = "Balances.transfer_keep_alive"
+max = { value = "10_000_000_000_000" }
+to = { dest = [
+  "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+  "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+] }
+
+# Batches, as long as every call inside is allowed too.
+[[allow]]
+call = "Utility.batch_all"
+
+# On-chain notes. `"Pallet.*"` would allow every call of a pallet instead.
+[[allow]]
+call = "System.remark"

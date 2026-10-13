@@ -8,6 +8,25 @@ use sp_core::{
 };
 use subxt::{Config, tx::Signer, utils::MultiSignature};
 
+/// A signature scheme.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Scheme {
+    Sr25519,
+    Ed25519,
+}
+
+impl std::fmt::Display for Scheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Sr25519 => "sr25519",
+            Self::Ed25519 => "ed25519",
+        })
+    }
+}
+
 // At most a couple of signers exist per run, so their size doesn't matter.
 #[allow(clippy::large_enum_variant)]
 pub enum PairSigner {
@@ -28,6 +47,13 @@ impl From<ed25519::Pair> for PairSigner {
 }
 
 impl PairSigner {
+    pub fn scheme(&self) -> Scheme {
+        match self {
+            Self::Sr25519(_) => Scheme::Sr25519,
+            Self::Ed25519(_) => Scheme::Ed25519,
+        }
+    }
+
     pub fn account_id(&self) -> AccountId32 {
         match self {
             Self::Sr25519(pair) => pair.public().into(),

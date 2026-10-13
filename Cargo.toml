@@ -15,7 +15,7 @@ anyhow = "1.0.98"
 bip39 = "2.1.0"
 clap = { version = "4.5.38", features = ["derive"] }
 hex = "0.4.3"
-inquire = { version = "0.7.5" }
+inquire = { version = "0.9.4" }
 codec = { package = "parity-scale-codec", version = "3.7.5" }
 sp-core = "36.1.0"
 subxt = { version = "0.42.1" }

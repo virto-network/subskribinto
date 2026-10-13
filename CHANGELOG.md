@@ -12,11 +12,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Unattended policy rules for signing without approval ([#19](https://github.com/virto-network/subskribinto/pull/19))
+- Unattended policy rules for signing without approval ([#19](https://github.com/virto-network/subskribinto/pull/19)):
+  - `unattended = true` on a rule signs the calls it allows without asking, when every call in the
+    transaction (nested ones included) is allowed by an unattended rule. Anything else still needs
+    your approval.
+  - `call = "*"` allows any other call, only with your approval: one policy can run routine
+    operations unattended and keep transfers behind Touch ID.
+  - `decode_call` and `encode_call` report whether a call will be signed unattended or needs approval.
+  - Every signature made with a stored account is recorded in a local audit log
+    (`audit.jsonl` in the local data directory); nothing is signed if it can't be recorded.
 
 ### Documentation
 
-- Add a policy reference ([#17](https://github.com/virto-network/subskribinto/pull/17))
+- Add a policy reference, `docs/policy.md` ([#17](https://github.com/virto-network/subskribinto/pull/17))
 
 ## [0.2.0](https://github.com/virto-network/subskribinto/releases/tag/v0.2.0)
 

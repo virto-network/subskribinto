@@ -1,3 +1,6 @@
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
+
 use super::*;
 
 use ::sp_core::crypto::Ss58Codec;

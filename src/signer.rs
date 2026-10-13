@@ -1,3 +1,6 @@
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
+
 use sp_core::{
     Pair,
     crypto::{AccountId32, Ss58Codec},

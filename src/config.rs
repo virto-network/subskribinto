@@ -1,3 +1,6 @@
+// Copyright (c) Virto Network
+// SPDX-License-Identifier: MIT
+
 use codec::Encode;
 use scale_info::PortableRegistry;
 use sp_core::crypto::AccountId32;

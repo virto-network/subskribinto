@@ -21,9 +21,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use crate::{
+    audit::AuditLog,
     call::DecodedCall,
     guard::Request,
-    policy::{ProxyConfig, Rule},
+    policy::{Approval, ProxyConfig, Rule},
     presence,
     store::Accounts,
     tx::{self, Api, Outcome},
@@ -36,13 +37,17 @@ endpoint; it may also sign as a proxy of another account.
 
 Workflow: `list_accounts` to see accounts and what they may do; `encode_call` (from pallet, call \
 and arguments) or `decode_call` (from hex call data) to build and check a call; then \
-`sign_and_submit`. The user approves every signature themselves (a prompt in this client and, on \
-macOS, Touch ID); you can't approve on their behalf, so tell them what you are about to submit and \
-why. Calls the policy doesn't allow are rejected before the user is asked: suggest a policy change \
-for them to make, don't try to work around it.";
+`sign_and_submit`. `encode_call` and `decode_call` report the `approval` a call needs:
+- `unattended`: every call in it matches rules the user marked unattended, so it is signed right \
+away, without asking them. Still tell them what you submitted and why.
+- `required`: the user approves it themselves (a prompt in this client and, on macOS, Touch ID); \
+you can't approve on their behalf, so tell them what you are about to submit and why. If they are \
+away from their computer, it will wait for them.
+Calls the policy doesn't allow are rejected before the user is asked: suggest a policy change for \
+them to make, don't try to work around it. Every signature is recorded in a local audit log.";
 
 pub async fn serve(accounts: Accounts) -> anyhow::Result<()> {
-    let server = Server::new(accounts);
+    let server = Server::new(accounts, AuditLog::default_location()?);
     let running = server.serve(rmcp::transport::stdio()).await?;
     running.waiting().await?;
     Ok(())
@@ -54,6 +59,7 @@ pub struct Server {
     chains: Arc<Mutex<HashMap<String, Api>>>,
     /// One signature at a time: keeps nonces in order and prompts from piling up.
     signing: Arc<Mutex<()>>,
+    audit: Arc<AuditLog>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -106,6 +112,9 @@ pub struct CallReport {
     pub calls: Vec<String>,
     /// Whether the account's policy allows it.
     pub allowed: bool,
+    /// When allowed: `unattended` (signed without asking the user) or `required` (the user
+    /// approves it first).
+    pub approval: Option<Approval>,
     /// Why the policy rejects it, when it does.
     pub rejection: Option<String>,
     /// The account it will be signed for, when the account signs as a proxy.
@@ -113,20 +122,21 @@ pub struct CallReport {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-struct Approval {
+struct ApprovalForm {
     /// Approve signing and submitting this transaction.
     approve: bool,
 }
 
-rmcp::elicit_safe!(Approval);
+rmcp::elicit_safe!(ApprovalForm);
 
 #[tool_router(router = tool_router)]
 impl Server {
-    pub fn new(accounts: Accounts) -> Self {
+    pub fn new(accounts: Accounts, audit: AuditLog) -> Self {
         Self {
             accounts: Arc::new(accounts),
             chains: Default::default(),
             signing: Default::default(),
+            audit: Arc::new(audit),
             tool_router: Self::tool_router(),
         }
     }
@@ -189,7 +199,7 @@ impl Server {
     }
 
     #[tool(
-        description = "Sign and submit a call with a stored account, after its policy allows it and the user approves it. Waits for finalization and returns the block and events."
+        description = "Sign and submit a call with a stored account, once its policy allows it and, unless every call matches an unattended rule, the user approves it. Waits for finalization and returns the block and events."
     )]
     async fn sign_and_submit(
         &self,
@@ -200,12 +210,14 @@ impl Server {
         let _signing = self.signing.lock().await;
 
         let request = self.request(&args.account, &call).await?;
-        request.check().map_err(error)?;
-        approve(&peer, &request).await?;
+        let approval = request.check().map_err(error)?;
+        if approval == Approval::Required {
+            approve(&peer, &request).await?;
+        }
 
-        let signer = request.account.signer().map_err(error)?;
         let api = self.api(&request.account.policy.endpoint).await?;
-        tx::sign_and_submit(&api, &request.signed, &signer, |_| {})
+        request
+            .sign(&api, approval, &self.audit, |_| {})
             .await
             .map(Json)
             .map_err(error)
@@ -245,8 +257,8 @@ impl Server {
 /// Ask the human: through the MCP client when it supports it, and through the operating system
 /// when it can. At least one must happen, and every one that happens must approve.
 async fn approve(peer: &Peer<RoleServer>, request: &Request) -> Result<(), String> {
-    let asked_in_client = match peer.elicit::<Approval>(request.summary()).await {
-        Ok(Some(Approval { approve: true })) => true,
+    let asked_in_client = match peer.elicit::<ApprovalForm>(request.summary()).await {
+        Ok(Some(ApprovalForm { approve: true })) => true,
         Ok(_) | Err(ElicitationError::UserDeclined | ElicitationError::UserCancelled) => {
             return Err("The user did not approve this transaction".into());
         }
@@ -268,12 +280,16 @@ async fn approve(peer: &Peer<RoleServer>, request: &Request) -> Result<(), Strin
 }
 
 fn report(request: &Request) -> Result<CallReport, String> {
-    let rejection = request.check().err().map(|e| e.to_string());
+    let (approval, rejection) = match request.check() {
+        Ok(approval) => (Some(approval), None),
+        Err(e) => (None, Some(e.to_string())),
+    };
     Ok(CallReport {
         call_data: format!("0x{}", hex::encode(request.call.bytes())),
         description: request.call.describe(),
         calls: request.call_names().map_err(error)?,
-        allowed: rejection.is_none(),
+        allowed: approval.is_some(),
+        approval,
         rejection,
         proxy_for: request.proxy().map(|proxy| proxy.real.clone()),
     })

@@ -4,8 +4,9 @@
 //! `subskribinto accounts …` and `subskribinto --account <name>`: managing accounts in the system
 //! keystore, and signing with them from the command line.
 //!
-//! Anything that changes an account, or signs with one, needs the user's approval through
-//! [`presence::confirm`]; signing also needs the account's policy to allow the call.
+//! Anything that changes an account needs the user's approval through [`presence::confirm`].
+//! Signing needs the account's policy to allow the call, and the same approval unless every call is
+//! allowed by an unattended rule.
 
 use std::path::{Path, PathBuf};
 
@@ -14,8 +15,9 @@ use clap::Subcommand;
 
 use crate::{
     SigningArgs,
+    audit::AuditLog,
     guard::Request,
-    policy::Policy,
+    policy::{Approval, Policy},
     presence, resolve_signing_choice,
     store::{AccountRecord, Accounts},
     tx::{self, Progress},
@@ -159,16 +161,20 @@ pub async fn sign_with_stored(
             record.policy.endpoint
         );
     }
+    let audit = AuditLog::default_location()?;
     let api = tx::connect(&record.policy.endpoint).await?;
     let request = Request::new(record, &api.metadata(), call)?;
-    request.check()?;
+    let approval = request.check()?;
 
     println!("{}\n", request.summary());
-    presence::confirm(&request.reason()).await?;
+    match approval {
+        Approval::Required => presence::confirm(&request.reason()).await?,
+        Approval::Unattended => println!("Allowed by unattended rules: signing without approval."),
+    }
 
-    let signer = request.account.signer()?;
-    let outcome = tx::sign_and_submit(&api, &request.signed, &signer, print_progress).await?;
+    let outcome = request.sign(&api, approval, &audit, print_progress).await?;
     print_outcome(&outcome);
+    println!("Recorded in {}", audit.path().display());
     Ok(())
 }
 

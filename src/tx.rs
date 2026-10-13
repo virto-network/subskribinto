@@ -100,9 +100,10 @@ mod tests {
 
     use super::*;
     use crate::{
+        audit::AuditLog,
         guard::Request,
         policy::{
-            Policy,
+            Approval, Policy,
             tests::{ALICE, BOB, CHARLIE},
         },
         store::AccountRecord,
@@ -139,12 +140,13 @@ mod tests {
             assert!(format!("{e:#}").contains("Duplicate"), "{e:#}");
         }
 
-        // Bob is stored with a policy that only allows small transfers to Charlie, for Alice.
+        // Bob is stored with a policy that only allows small transfers to Charlie, for Alice, and
+        // signs them without asking.
         let record = || {
             let policy = Policy::from_toml(&format!(
                 "endpoint = \"{}\"\n\
                  [proxy]\nreal = \"{ALICE}\"\ntype = \"Any\"\n\
-                 [[allow]]\ncall = \"Balances.transfer_keep_alive\"\n\
+                 [[allow]]\ncall = \"Balances.transfer_keep_alive\"\nunattended = true\n\
                  max = {{ value = 1000000000000 }}\nto = {{ dest = [\"{CHARLIE}\"] }}",
                 endpoint()
             ))
@@ -166,11 +168,19 @@ mod tests {
         assert!(too_much.check().is_err());
 
         let request = Request::new(record(), &metadata, transfer(1_000_000_000).bytes()).unwrap();
-        request.check().unwrap();
-        let signer = request.account.signer().unwrap();
-        let outcome = sign_and_submit(&api, &request.signed, &signer, |_| {})
-            .await
-            .unwrap();
+        let approval = request.check().unwrap();
+        assert_eq!(approval, Approval::Unattended);
+
+        let log_path = std::env::temp_dir()
+            .join(format!("subskribinto-devchain-{}", std::process::id()))
+            .join("audit.jsonl");
+        let audit = AuditLog::at(log_path.clone());
+        let outcome = request.sign(&api, approval, &audit, |_| {}).await.unwrap();
+
+        let log = std::fs::read_to_string(&log_path).unwrap();
+        assert_eq!(log.lines().count(), 2, "{log}");
+        assert!(log.contains(&outcome.tx_hash), "{log}");
+        std::fs::remove_dir_all(log_path.parent().unwrap()).unwrap();
 
         println!("{outcome:#?}");
         assert!(

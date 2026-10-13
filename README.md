@@ -103,7 +103,9 @@ Three guards stand between the assistant and a signature:
    [policy reference](docs/policy.md).
 2. **Your approval for every signature**, shown in the MCP client and, on macOS, through Touch ID
    or your account password: something the assistant can't provide. Changing or removing an
-   account needs the same approval.
+   account needs the same approval. You can mark specific rules as
+   [unattended](docs/policy.md#unattended-rules) to let routine operations through without you,
+   and every signature is recorded in a local [audit log](docs/policy.md#audit-log).
 3. **Signing as a restricted proxy** (recommended): store a fresh key, make it a proxy of the
    account that holds funds with `Proxy.add_proxy` and a narrow `ProxyType`, and set `[proxy]` in
    its policy. Every call is then wrapped in `Proxy.proxy`, so even an approved mistake is bounded
@@ -189,9 +191,11 @@ let bytes = call.encode();
 | `src/policy.rs`, `src/call.rs` | Policies, and decoding / checking calls (including nested ones) against them |
 | `src/guard.rs` | The one path stored accounts sign through: policy, proxy wrapping, approval text |
 | `src/presence.rs` | Asking for the user's approval (Touch ID on macOS, terminal elsewhere) |
+| `src/audit.rs` | The local audit log of every signature made with a stored account |
 | `src/mcp.rs`  | The stdio MCP server |
 | `src/accounts.rs` | `accounts` subcommands and `--account` signing |
 | `examples/policy.toml` | An annotated example policy |
+| `examples/unattended.toml` | Admin operations unattended, everything else with approval |
 | `fixtures/`   | Throwaway test accounts exported by polkadot{.js} (password `testacct`) |
 | `metadata/`   | Kreivo runtime metadata, used at compile time |
 

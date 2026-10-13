@@ -194,7 +194,7 @@ fn derive_scrypt_key(password: &str, header: &[u8], out: &mut [u8; 32]) -> anyho
     );
 
     // polkadot{.js} derives 64 bytes and keeps the first 32, which is what deriving 32 yields.
-    let params = scrypt::Params::new(n.trailing_zeros() as u8, r, p, out.len())
+    let params = scrypt::Params::new(n.trailing_zeros() as u8, r, p)
         .map_err(|e| anyhow!("Invalid scrypt parameters: {e}"))?;
     scrypt::scrypt(password.as_bytes(), salt, &params, out)
         .map_err(|e| anyhow!("scrypt failed: {e}"))

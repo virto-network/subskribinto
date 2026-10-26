@@ -5,4 +5,10 @@
 # when we depend on them directly: the transitive ones come from the Polkadot SDK and Subxt, and have
 # no maintained release to move to yet.
 unmaintained = "workspace"
-ignore = []
+ignore = [
+  # crypto-bigint 0.5 (timing side channels in constant-time arithmetic) only reaches us through
+  # sp-core -> k256 0.13 (ECDSA/secp256k1), which can't use the fixed 0.7 line. subskribinto never
+  # creates or uses ECDSA keys (only sr25519 and ed25519), so the affected code never touches a
+  # secret. Revisit when the Polkadot SDK crates move to k256 0.14.
+  { id = "RUSTSEC-2026-0387", reason = "only reachable through sp-core's unused ECDSA support" },
+]

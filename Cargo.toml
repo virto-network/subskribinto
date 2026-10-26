@@ -33,7 +33,7 @@ scale-value = "0.18"
 schemars = "1"
 toml = "1"
 zeroize = { version = "1.8", features = ["serde"] }
-dirs = "6"
+dirs = "7"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

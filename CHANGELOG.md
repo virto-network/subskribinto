@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/virto-network/subskribinto/releases/tag/v0.2.3) - 2026-10-26
+
+### Fixed
+
+- *(mcp)* Reconnect when the chain connection dies or the runtime changes
+  ([#26](https://github.com/virto-network/subskribinto/pull/26)). The MCP server reused one chain client for its whole
+  life: after its websocket dropped, every `sign_and_submit` failed with "The background task closed connection
+  closed; restart required" until the server was restarted, and after a runtime upgrade it would have signed with
+  outdated metadata.
+- *(mcp)* A signature that fails after its transaction was submitted now names the transaction hash and asks to check
+  the chain before signing again, and the audit log records that hash
+  ([#26](https://github.com/virto-network/subskribinto/pull/26)). This prevents signing the same call twice after a
+  failure mid-flight.
+
+### Security
+
+- Updated `rustls`, `rustls-webpki`, `webpki-root-certs`, `ctutils` and `tokio` to releases fixing new advisories
+  ([#27](https://github.com/virto-network/subskribinto/pull/27)).
+
 ## [0.2.2](https://github.com/virto-network/subskribinto/releases/tag/v0.2.2) - 2026-10-13
 
 ### Changed

@@ -17,7 +17,7 @@ clap = { version = "4.5.38", features = ["derive"] }
 hex = "0.4.3"
 inquire = { version = "0.9.4" }
 codec = { package = "parity-scale-codec", version = "3.7.5" }
-sp-core = "36.1.0"
+sp-core = "43.0.0"
 subxt = { version = "0.42.1" }
 tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 scale-info = "2.11.6"

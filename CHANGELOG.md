@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/virto-network/subskribinto/releases/tag/v0.2.3) - 2026-10-26
+
+### Fixed
+
+- *(mcp)* Reconnect when the chain connection dies or the runtime changes ([#26](https://github.com/virto-network/subskribinto/pull/26))
+
+### Other
+
+- *(deps)* Update crates with new security advisories ([#27](https://github.com/virto-network/subskribinto/pull/27))
+
 ## [0.2.2](https://github.com/virto-network/subskribinto/releases/tag/v0.2.2) - 2026-10-13
 
 ### Changed

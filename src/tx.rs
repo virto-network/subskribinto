@@ -6,6 +6,8 @@
 use anyhow::{anyhow, bail, ensure};
 use schemars::JsonSchema;
 use serde::Serialize;
+use std::{fmt, time::Duration};
+
 use subxt::{OnlineClient, tx::TxStatus};
 
 use crate::{call::DecodedCall, config::KreivoConfig, signer::PairSigner};
@@ -16,6 +18,28 @@ pub async fn connect(endpoint: &str) -> anyhow::Result<Api> {
     Api::from_url(endpoint)
         .await
         .map_err(|e| anyhow!("Cannot connect to {endpoint}: {e}"))
+}
+
+/// How long [`is_current`] waits for the node before giving up on a connection.
+const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Whether a client from [`connect`] can still be used: its connection answers, and it was built
+/// for the runtime the chain runs now. After a runtime upgrade its metadata and transaction
+/// version are outdated, and the chain would reject what it signs.
+pub async fn is_current(api: &Api) -> bool {
+    let built = api.runtime_version();
+    match tokio::time::timeout(
+        HEALTH_CHECK_TIMEOUT,
+        api.backend().current_runtime_version(),
+    )
+    .await
+    {
+        Ok(Ok(now)) => {
+            now.spec_version == built.spec_version
+                && now.transaction_version == built.transaction_version
+        }
+        _ => false,
+    }
 }
 
 /// Intermediate steps of a submission, for callers that report progress.
@@ -34,13 +58,53 @@ pub struct Outcome {
     pub events: Vec<String>,
 }
 
+/// A signature that didn't end in a successful, finalized transaction.
+///
+/// When `tx_hash` is set, the transaction was already submitted: it may be (or become) included on
+/// chain anyway, so it must not be signed again before checking the chain.
+#[derive(Debug)]
+pub struct Failure {
+    pub tx_hash: Option<String>,
+    pub error: anyhow::Error,
+}
+
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.tx_hash {
+            Some(tx_hash) => write!(
+                f,
+                "Transaction {tx_hash} was submitted, but didn't finish successfully: {:#}. It may \
+                 already be on chain: check it before signing it again",
+                self.error
+            ),
+            None => write!(f, "{:#}", self.error),
+        }
+    }
+}
+
+impl std::error::Error for Failure {}
+
 /// Sign `call` exactly as decoded, submit it, and follow it until it is finalized.
-/// Fails if it is invalid, dropped, or dispatched with an error.
+/// Fails if it is invalid, dropped, or dispatched with an error; once submitted, the failure carries
+/// the transaction hash.
 pub async fn sign_and_submit(
     api: &Api,
     call: &DecodedCall,
     signer: &PairSigner,
+    progress: impl FnMut(Progress<'_>),
+) -> Result<Outcome, Failure> {
+    let mut tx_hash = None;
+    submit_and_follow(api, call, signer, progress, &mut tx_hash)
+        .await
+        .map_err(|error| Failure { tx_hash, error })
+}
+
+async fn submit_and_follow(
+    api: &Api,
+    call: &DecodedCall,
+    signer: &PairSigner,
     mut progress: impl FnMut(Progress<'_>),
+    submitted: &mut Option<String>,
 ) -> anyhow::Result<Outcome> {
     let payload = call.payload()?;
     ensure!(
@@ -53,6 +117,7 @@ pub async fn sign_and_submit(
         .sign_and_submit_then_watch_default(&payload, signer)
         .await?;
     let tx_hash = format!("{:?}", tx.extrinsic_hash());
+    *submitted = Some(tx_hash.clone());
     progress(Progress::Submitted { tx_hash: &tx_hash });
 
     while let Some(status) = tx.next().await {
@@ -117,6 +182,27 @@ mod tests {
 
     fn endpoint() -> String {
         std::env::var("SUBSKRIBINTO_DEV_NODE").unwrap_or_else(|_| "ws://127.0.0.1:19944".into())
+    }
+
+    #[test]
+    fn failures_after_submission_name_the_transaction() {
+        let submitted = Failure {
+            tx_hash: Some("0xf120".into()),
+            error: anyhow!("RPC error: connection closed"),
+        };
+        let message = submitted.to_string();
+        assert!(message.contains("0xf120"), "{message}");
+        assert!(
+            message.contains("check it before signing it again"),
+            "{message}"
+        );
+        assert!(message.contains("connection closed"), "{message}");
+
+        let not_submitted = Failure {
+            tx_hash: None,
+            error: anyhow!("Cannot connect"),
+        };
+        assert_eq!(not_submitted.to_string(), "Cannot connect");
     }
 
     #[tokio::test]

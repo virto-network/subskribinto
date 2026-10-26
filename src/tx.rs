@@ -6,6 +6,8 @@
 use anyhow::{anyhow, bail, ensure};
 use schemars::JsonSchema;
 use serde::Serialize;
+use std::time::Duration;
+
 use subxt::{OnlineClient, tx::TxStatus};
 
 use crate::{call::DecodedCall, config::KreivoConfig, signer::PairSigner};
@@ -16,6 +18,28 @@ pub async fn connect(endpoint: &str) -> anyhow::Result<Api> {
     Api::from_url(endpoint)
         .await
         .map_err(|e| anyhow!("Cannot connect to {endpoint}: {e}"))
+}
+
+/// How long [`is_current`] waits for the node before giving up on a connection.
+const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Whether a client from [`connect`] can still be used: its connection answers, and it was built
+/// for the runtime the chain runs now. After a runtime upgrade its metadata and transaction
+/// version are outdated, and the chain would reject what it signs.
+pub async fn is_current(api: &Api) -> bool {
+    let built = api.runtime_version();
+    match tokio::time::timeout(
+        HEALTH_CHECK_TIMEOUT,
+        api.backend().current_runtime_version(),
+    )
+    .await
+    {
+        Ok(Ok(now)) => {
+            now.spec_version == built.spec_version
+                && now.transaction_version == built.transaction_version
+        }
+        _ => false,
+    }
 }
 
 /// Intermediate steps of a submission, for callers that report progress.

@@ -237,10 +237,15 @@ impl ServerHandler for Server {
 }
 
 impl Server {
+    /// A client for `endpoint`. It is reused while its connection is alive and the chain runs the
+    /// same runtime, and replaced otherwise: after a dropped websocket or a runtime upgrade.
     async fn api(&self, endpoint: &str) -> Result<Api, String> {
         let mut chains = self.chains.lock().await;
         if let Some(api) = chains.get(endpoint) {
-            return Ok(api.clone());
+            if tx::is_current(api).await {
+                return Ok(api.clone());
+            }
+            chains.remove(endpoint);
         }
         let api = tx::connect(endpoint).await.map_err(error)?;
         chains.insert(endpoint.to_owned(), api.clone());
@@ -301,4 +306,68 @@ fn parse_hex_call(call: &str) -> Result<Vec<u8>, String> {
 
 fn error(e: anyhow::Error) -> String {
     format!("{e:#}")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        process::{Child, Command, Stdio},
+        time::Duration,
+    };
+
+    use super::*;
+    use crate::store::memory::MemoryKeystore;
+
+    const PORT: u16 = 19955;
+
+    fn start_dev_node() -> Child {
+        Command::new("polkadot")
+            .args(["--dev", "--tmp", "--no-telemetry", "--no-prometheus"])
+            .args(["--no-hardware-benchmarks", "--rpc-port", &PORT.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("`polkadot` must be on the PATH")
+    }
+
+    /// The server's client for the dev node, waiting for the node to accept connections.
+    async fn api_when_up(server: &Server, endpoint: &str) -> Api {
+        for _ in 0..120 {
+            if let Ok(api) = server.api(endpoint).await {
+                return api;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        panic!("the dev node didn't come up");
+    }
+
+    #[tokio::test]
+    #[ignore = "starts a local dev chain with the `polkadot` binary"]
+    async fn replaces_a_client_whose_connection_died() {
+        let endpoint = format!("ws://127.0.0.1:{PORT}");
+        let audit = AuditLog::at(std::env::temp_dir().join("subskribinto-reconnect-audit.jsonl"));
+        let server = Server::new(Accounts::new(MemoryKeystore::default()), audit);
+
+        let mut node = start_dev_node();
+        let first = api_when_up(&server, &endpoint).await;
+        assert!(tx::is_current(&first).await);
+
+        // The node goes away: the cached client's websocket dies with it.
+        node.kill().unwrap();
+        node.wait().unwrap();
+        assert!(!tx::is_current(&first).await);
+
+        // Once the node is back, the server must hand out a working client, not the dead one.
+        let mut node = start_dev_node();
+        let second = api_when_up(&server, &endpoint).await;
+        let head = second
+            .blocks()
+            .at_latest()
+            .await
+            .map(|block| block.number());
+        node.kill().unwrap();
+        node.wait().unwrap();
+        assert!(head.is_ok(), "{head:?}");
+        assert!(!tx::is_current(&first).await, "the old client stays dead");
+    }
 }

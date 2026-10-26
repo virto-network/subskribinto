@@ -44,7 +44,10 @@ away, without asking them. Still tell them what you submitted and why.
 you can't approve on their behalf, so tell them what you are about to submit and why. If they are \
 away from their computer, it will wait for them.
 Calls the policy doesn't allow are rejected before the user is asked: suggest a policy change for \
-them to make, don't try to work around it. Every signature is recorded in a local audit log.";
+them to make, don't try to work around it. Every signature is recorded in a local audit log.
+
+If `sign_and_submit` fails with an error that names a transaction hash, the transaction was already \
+submitted and may be on chain: never sign the same call again until you have checked.";
 
 pub async fn serve(accounts: Accounts) -> anyhow::Result<()> {
     let server = Server::new(accounts, AuditLog::default_location()?);

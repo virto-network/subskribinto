@@ -12,7 +12,7 @@ use crate::{
     call::DecodedCall,
     policy::{Approval, ProxyConfig, parse_account},
     store::AccountRecord,
-    tx::{self, Api, Outcome, Progress},
+    tx::{self, Api, Failure, Outcome, Progress},
 };
 
 /// Longest call description put in an operating-system approval dialog.
@@ -58,12 +58,15 @@ impl Request {
         audit.signing(self, approval)?;
         let outcome = match self.account.signer() {
             Ok(signer) => tx::sign_and_submit(api, &self.signed, &signer, progress).await,
-            Err(e) => Err(e),
+            Err(error) => Err(Failure {
+                tx_hash: None,
+                error,
+            }),
         };
         if let Err(e) = audit.finished(self, approval, &outcome) {
             eprintln!("warning: {e:#}");
         }
-        outcome
+        Ok(outcome?)
     }
 
     /// `Pallet.call` of the requested call and of every call nested in it.

@@ -17,7 +17,11 @@ use std::{
 use anyhow::Context;
 use serde::Serialize;
 
-use crate::{guard::Request, policy::Approval, tx::Outcome};
+use crate::{
+    guard::Request,
+    policy::Approval,
+    tx::{Failure, Outcome},
+};
 
 pub struct AuditLog {
     path: PathBuf,
@@ -61,7 +65,7 @@ impl AuditLog {
 
     /// Record a signature about to happen. Callers must not sign if this fails.
     pub fn signing(&self, request: &Request, approval: Approval) -> anyhow::Result<()> {
-        self.write(request, approval, "signing", None, None)
+        self.write(request, approval, "signing", None, None, None)
     }
 
     /// Record how a signature ended.
@@ -69,11 +73,25 @@ impl AuditLog {
         &self,
         request: &Request,
         approval: Approval,
-        outcome: &anyhow::Result<Outcome>,
+        outcome: &Result<Outcome, Failure>,
     ) -> anyhow::Result<()> {
         match outcome {
-            Ok(outcome) => self.write(request, approval, "finalized", Some(outcome), None),
-            Err(e) => self.write(request, approval, "failed", None, Some(&format!("{e:#}"))),
+            Ok(outcome) => self.write(
+                request,
+                approval,
+                "finalized",
+                Some(&outcome.tx_hash),
+                Some(&outcome.block_hash),
+                None,
+            ),
+            Err(failure) => self.write(
+                request,
+                approval,
+                "failed",
+                failure.tx_hash.as_deref(),
+                None,
+                Some(&format!("{:#}", failure.error)),
+            ),
         }
     }
 
@@ -82,7 +100,8 @@ impl AuditLog {
         request: &Request,
         approval: Approval,
         event: &str,
-        outcome: Option<&Outcome>,
+        tx_hash: Option<&str>,
+        block_hash: Option<&str>,
         error: Option<&str>,
     ) -> anyhow::Result<()> {
         let calls = request.call_names()?;
@@ -98,8 +117,8 @@ impl AuditLog {
             approval,
             calls: &calls,
             call_data: &format!("0x{}", hex::encode(request.call.bytes())),
-            tx_hash: outcome.map(|o| o.tx_hash.as_str()),
-            block_hash: outcome.map(|o| o.block_hash.as_str()),
+            tx_hash,
+            block_hash,
             error,
         };
 
@@ -154,7 +173,10 @@ mod tests {
         log.finished(
             &request,
             Approval::Required,
-            &Err(anyhow::anyhow!("dropped")),
+            &Err(Failure {
+                tx_hash: Some("0xabc".into()),
+                error: anyhow::anyhow!("dropped"),
+            }),
         )
         .unwrap();
 
@@ -170,6 +192,10 @@ mod tests {
         assert_eq!(lines[0]["calls"][0], "Balances.transfer_keep_alive");
         assert_eq!(lines[1]["event"], "failed");
         assert_eq!(lines[1]["error"], "dropped");
+        assert_eq!(
+            lines[1]["tx_hash"], "0xabc",
+            "a submitted transaction keeps its hash"
+        );
         std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 }
